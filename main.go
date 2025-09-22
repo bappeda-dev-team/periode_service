@@ -1,57 +1,98 @@
 package main
 
 import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
 
-// var db *sql.DB
+var db *sql.DB
 
-// func initDB() {
-// 	dsn := os.Getenv("PERENCANAAN_DB_URL")
-// 	if dsn == "" {
-// 		log.Fatal("PERENCANAAN_DB_URL env tidak terdefinisi")
-// 	}
+func initDB() {
+	dsn := os.Getenv("PERENCANAAN_DB_URL")
+	if dsn == "" {
+		log.Fatal("PERENCANAAN_DB_URL env tidak terdefinisi")
+	}
 
-// 	var err error
-// 	db, err = sql.Open("mysql", dsn)
-// 	if err != nil {
-// 		log.Fatalf("[FATAL] Error connecting to db: %v", err)
-// 	}
+	var err error
+	db, err = sql.Open("mysql", dsn)
+	if err != nil {
+		log.Fatalf("[FATAL] Error connecting to db: %v", err)
+	}
 
-// 	log.Printf("koneksi ke database berhasil")
-// 	db.SetMaxOpenConns(70)
-// 	db.SetMaxIdleConns(300)
-// 	db.SetConnMaxIdleTime(5 * time.Minute)
-// 	db.SetConnMaxLifetime(60 * time.Minute)
+	log.Printf("koneksi ke database berhasil")
+	db.SetMaxOpenConns(70)
+	db.SetMaxIdleConns(300)
+	db.SetConnMaxIdleTime(5 * time.Minute)
+	db.SetConnMaxLifetime(60 * time.Minute)
 
-// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-// 	defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-// 	err = db.PingContext(ctx)
-// 	if err != nil {
-// 		log.Printf("Gagal terhubung ke database dalam 10 detik: %v", err)
-// 		log.Printf("Mencoba koneksi ulang...")
+	err = db.PingContext(ctx)
+	if err != nil {
+		log.Printf("Gagal terhubung ke database dalam 10 detik: %v", err)
+		log.Printf("Mencoba koneksi ulang...")
 
-// 		// Coba lagi dengan timeout yang lebih lama
-// 		ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
-// 		defer cancel()
+		// Coba lagi dengan timeout yang lebih lama
+		ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
-// 		err = db.PingContext(ctx)
-// 		if err != nil {
-// 			db.Close()
-// 			log.Fatalf("Koneksi database gagal setelah percobaan ulang: %v", err)
-// 		}
-// 	}
+		err = db.PingContext(ctx)
+		if err != nil {
+			db.Close()
+			log.Fatalf("Koneksi database gagal setelah percobaan ulang: %v", err)
+		}
+	}
 
-// 	log.Print("Berhasil terhubung ke database")
-// 	log.Printf("Max Open Connections: %d", db.Stats().MaxOpenConnections)
-// 	log.Printf("Open Connections: %d", db.Stats().OpenConnections)
-// 	log.Printf("In Use Connections: %d", db.Stats().InUse)
-// 	log.Printf("Idle Connections: %d", db.Stats().Idle)
-// }
+	log.Print("Berhasil terhubung ke database")
+	log.Printf("Max Open Connections: %d", db.Stats().MaxOpenConnections)
+	log.Printf("Open Connections: %d", db.Stats().OpenConnections)
+	log.Printf("In Use Connections: %d", db.Stats().InUse)
+	log.Printf("Idle Connections: %d", db.Stats().Idle)
+}
+
+func periodeHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed, pakai GET", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// query pohon tematik
+	rows, err := db.Query(`SELECT id, tahun_awal, tahun_akhir
+                           FROM tb_periode`)
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+	}
+	defer rows.Close()
+
+	var list []Periode
+	for rows.Next() {
+		var periode Periode
+		if err:= rows.Scan(&periode.Id, &periode.TahunAwal, &periode.TahunAkhir); err != nil {
+			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		list = append(list, periode)
+	}
+
+	msg := fmt.Sprintf("Daftar Periode")
+	response := Response{
+		Status:  http.StatusOK,
+		Message: msg,
+		Data: list}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
 
 func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -62,10 +103,10 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	log.Print("PERIODE SERVICE")
 
-	// initDB()
+	initDB()
 
 	http.HandleFunc("/health", healthCheckHandler)
-	// http.HandleFunc("/periode", periodeHandler)
+	http.HandleFunc("/periode", periodeHandler)
 
 	handler := corsMiddleware(http.DefaultServeMux)
 	log.Println("Server running di :8080")
