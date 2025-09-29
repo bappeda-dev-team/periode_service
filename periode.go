@@ -16,3 +16,12 @@ type Opd struct {
 	KodeOpd string `json:"kode_opd"`
 	NamaOpd string `json:"nama_opd"`
 }
+
+type User struct {
+	Nama     string `json:"nama_pegawai"`
+	Nip      string `json:"nip"`
+	Email    string `json:"email"`
+	IsActive int    `json:"-"`
+	Status   string `json:"status"`
+	Roles    string `json:"roles"`
+}

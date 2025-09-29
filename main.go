@@ -75,7 +75,7 @@ func periodeHandler(w http.ResponseWriter, r *http.Request) {
 	var list []Periode
 	for rows.Next() {
 		var periode Periode
-		if err:= rows.Scan(&periode.Id, &periode.TahunAwal, &periode.TahunAkhir); err != nil {
+		if err := rows.Scan(&periode.Id, &periode.TahunAwal, &periode.TahunAkhir); err != nil {
 			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -87,7 +87,7 @@ func periodeHandler(w http.ResponseWriter, r *http.Request) {
 	response := Response{
 		Status:  http.StatusOK,
 		Message: msg,
-		Data: list}
+		Data:    list}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
@@ -110,7 +110,7 @@ func listOpdHandler(w http.ResponseWriter, r *http.Request) {
 	var list []Opd
 	for rows.Next() {
 		var opd Opd
-		if err:= rows.Scan(&opd.KodeOpd, &opd.NamaOpd); err != nil {
+		if err := rows.Scan(&opd.KodeOpd, &opd.NamaOpd); err != nil {
 			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -122,11 +122,60 @@ func listOpdHandler(w http.ResponseWriter, r *http.Request) {
 	response := Response{
 		Status:  http.StatusOK,
 		Message: msg,
-		Data: list}
+		Data:    list}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
 
+func listUserHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed, pakai GET", http.StatusMethodNotAllowed)
+		return
+	}
+
+	kodeOpd := r.URL.Query().Get("kode_opd")
+	if kodeOpd == " " || len(kodeOpd) != 22 {
+		http.Error(w, "KODE OPD TIDAK DITEMUKAN", http.StatusBadRequest)
+		return
+	}
+
+	// query opd
+	rows, err := db.Query(`SELECT DISTINCT u.nip, p.nama, u.email, u.is_active, r.role
+                           FROM tb_users u
+                           JOIN tb_pegawai p ON u.nip = p.nip
+                           JOIN tb_user_role ur ON u.id = ur.user_id
+                           JOIN tb_role r ON ur.role_id = r.id
+                           WHERE p.kode_opd = ?`, kodeOpd)
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+	}
+	defer rows.Close()
+
+	var list []User
+	for rows.Next() {
+		var user User
+		if err := rows.Scan(&user.Nip, &user.Nama, &user.Email, &user.IsActive, &user.Roles); err != nil {
+			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		statusText := "Tidak Aktif"
+		if user.IsActive == 1 {
+			statusText = "Aktif"
+		}
+		user.Status = statusText
+
+		list = append(list, user)
+	}
+
+	msg := "Daftar User OPD"
+	response := Response{
+		Status:  http.StatusOK,
+		Message: msg,
+		Data:    list}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
@@ -136,13 +185,14 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	log.Print("PERIODE SERVICE")
+	log.Print("BUKAN PERIODE SERVICE")
 
 	initDB()
 
 	http.HandleFunc("/health", healthCheckHandler)
 	http.HandleFunc("/periode", periodeHandler)
 	http.HandleFunc("/list_opd", listOpdHandler)
+	http.HandleFunc("/list_user", listUserHandler)
 
 	handler := corsMiddleware(http.DefaultServeMux)
 	log.Println("Server running di :8080")
