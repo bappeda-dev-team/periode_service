@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -84,7 +83,7 @@ func periodeHandler(w http.ResponseWriter, r *http.Request) {
 		list = append(list, periode)
 	}
 
-	msg := fmt.Sprintf("Daftar Periode")
+	msg := "Daftar Periode"
 	response := Response{
 		Status:  http.StatusOK,
 		Message: msg,
@@ -92,6 +91,42 @@ func periodeHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func listOpdHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed, pakai GET", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// query opd
+	rows, err := db.Query(`SELECT kode_opd, nama_opd
+                           FROM tb_operasional_daerah`)
+	if err != nil {
+		http.Error(w, "query error: "+err.Error(), http.StatusInternalServerError)
+	}
+	defer rows.Close()
+
+	var list []Opd
+	for rows.Next() {
+		var opd Opd
+		if err:= rows.Scan(&opd.KodeOpd, &opd.NamaOpd); err != nil {
+			http.Error(w, "scan error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		list = append(list, opd)
+	}
+
+	msg := "Daftar OPD"
+	response := Response{
+		Status:  http.StatusOK,
+		Message: msg,
+		Data: list}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+
 }
 
 func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
@@ -107,6 +142,7 @@ func main() {
 
 	http.HandleFunc("/health", healthCheckHandler)
 	http.HandleFunc("/periode", periodeHandler)
+	http.HandleFunc("/list_opd", listOpdHandler)
 
 	handler := corsMiddleware(http.DefaultServeMux)
 	log.Println("Server running di :8080")
